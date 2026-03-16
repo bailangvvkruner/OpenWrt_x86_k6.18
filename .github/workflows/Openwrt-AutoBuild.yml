@@ -116,7 +116,7 @@ jobs:
         make po2lmo
         sudo cp -f po2lmo /usr/local/bin/po2lmo
         sudo chmod +x /usr/local/bin/po2lmo
-        cd -
+        cd $GITHUB_WORKSPACE
         rm -rf /tmp/luci
         
         # 设置时区（兼容容器环境）
