@@ -70,28 +70,59 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
       run: |
         echo "Installing required dependencies on self-hosted runner..."
+        
+        # 切换到官方 Ubuntu 源
+        sudo sed -i 's|http://mirrors.cloud.tencent.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+        sudo sed -i 's|http://mirrors.tencentyun.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+        sudo sed -i 's|https://mirrors.cloud.tencent.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+        sudo sed -i 's|https://mirrors.tencentyun.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+        
         sudo apt-get update
         sudo apt-get install -y \
-          build-essential clang flex bison gawk gcc g++ gettext git \
-          libncurses-dev libssl-dev python3 python3-dev rsync swig unzip \
-          zlib1g-dev wget file ccache jq \
-          libboost-system-dev libboost-filesystem-dev libpcre3-dev \
-          libelf-dev device-tree-compiler libgmp3-dev libmpc-dev libfuse-dev dwarves \
-          qemu-utils aria2 dos2unix libfuse-dev
+          ack antlr3 asciidoc autoconf automake autopoint binutils bison \
+          build-essential bzip2 ccache cmake cpio curl device-tree-compiler \
+          ecj fakeroot fastjar flex gawk gettext genisoimage gnutls-dev \
+          gperf haveged help2man intltool irqbalance jq lib32gcc-s1 \
+          libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          libmpc-dev libmpfr-dev libncurses-dev libreadline-dev libssl-dev \
+          libtool libyaml-dev libz-dev lrzsz msmtp nano ninja-build \
+          p7zip p7zip-full patch pkgconf libpython3-dev python3 python3-pip \
+          python3-cryptography python3-docutils python3-ply python3-pyelftools \
+          python3-requests qemu-utils quilt re2c rsync scons sharutils \
+          squashfs-tools subversion swig texinfo uglifyjs unzip vim wget \
+          xmlto zlib1g-dev zstd xxd dos2unix libfuse-dev \
+          gcc-multilib g++-multilib clang llvm nodejs npm yarn golang-go gh
         
-        # # 切换到官方 Ubuntu 源（香港机器用官方源更快）
-        # sudo sed -i 's|http://mirrors.cloud.tencent.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
-        # sudo sed -i 's|http://mirrors.tencentyun.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+        # 安装 UPX
+        UPX_VER="5.0.2"
+        curl -fLO "https://github.com/upx/upx/releases/download/v${UPX_VER}/upx-${UPX_VER}-amd64_linux.tar.xz"
+        tar -Jxf "upx-${UPX_VER}-amd64_linux.tar.xz"
+        sudo cp -f "upx-${UPX_VER}-amd64_linux/upx" /usr/local/bin/upx
+        sudo chmod +x /usr/local/bin/upx
+        rm -rf "upx-${UPX_VER}-amd64_linux"*
         
-        # sudo -E apt -yqq update
-        # sudo -E apt -yqq full-upgrade
-        # sudo -E apt -yqq autoremove --purge
-        # sudo -E apt -yqq autoclean
-        # sudo -E apt -yqq clean
-        # sudo -E apt -yqq install dos2unix libfuse-dev
-        # sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
-        # sudo -E systemctl daemon-reload
-        # sudo -E timedatectl set-timezone "Asia/Shanghai"
+        # 编译安装 padjffs2
+        curl -fLO "https://raw.githubusercontent.com/openwrt/openwrt/main/tools/padjffs2/src/padjffs2.c"
+        gcc -Wall -Werror -o padjffs2 padjffs2.c
+        sudo cp -f padjffs2 /usr/local/bin/padjffs2
+        sudo chmod +x /usr/local/bin/padjffs2
+        rm -f padjffs2.c padjffs2
+        
+        # 编译安装 po2lmo
+        git clone --depth=1 --filter=blob:none --sparse https://github.com/openwrt/luci.git /tmp/luci
+        cd /tmp/luci
+        git sparse-checkout set modules/luci-base/src
+        cd modules/luci-base/src
+        make po2lmo
+        sudo cp -f po2lmo /usr/local/bin/po2lmo
+        sudo chmod +x /usr/local/bin/po2lmo
+        cd -
+        rm -rf /tmp/luci
+        
+        # 设置时区（兼容容器环境）
+        if [ -f /.dockerenv ] || ! pidof systemd > /dev/null 2>&1; then
+          sudo ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+        fi
 
         echo "All dependencies installed"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
