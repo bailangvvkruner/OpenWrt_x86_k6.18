@@ -153,17 +153,9 @@ sed -i "s/procd-ujail//" include/target.mk
 # 这样可以绕过内核模块版本检查，允许安装不同版本的模块
 sed -i "s/^.*vermagic$/\techo '1' > \$(LINUX_DIR)\/.vermagic/" include/kernel-defaults.mk
 
-# ========== 等待 OP-Packages 构建完成 ==========
-# 检查 OP-Packages 仓库的 GitHub Actions 状态
-# 如果正在构建，则等待 5 秒后重试
-# 确保使用最新构建完成的软件包
-status=$(curl -H "Authorization: token $REPO_TOKEN" -s "https://api.github.com/repos/mgz0227/OP-Packages/actions/runs" | jq -r '.workflow_runs[0].status')
-echo "$status"
-while [[ "$status" == "in_progress" || "$status" == "queued" ]];do
-	echo "wait 5s"
-	sleep 5
-	status=$(curl -H "Authorization: token $REPO_TOKEN" -s "https://api.github.com/repos/mgz0227/OP-Packages/actions/runs" | jq -r '.workflow_runs[0].status')
-done
+# ========== (已移除) 等待 OP-Packages 构建完成 ==========
+# 原代码需要 GitHub Token，已移除
+# 如需启用，请自行添加 REPO_TOKEN 环境变量
 
 # ========== (已注释) 其他可选修改 ==========
 # 删除内核大小检查，允许生成更大的固件
