@@ -91,7 +91,7 @@ jobs:
           python3-requests qemu-utils quilt re2c rsync scons sharutils \
           squashfs-tools subversion swig texinfo uglifyjs unzip vim wget \
           xmlto zlib1g-dev zstd xxd dos2unix libfuse-dev \
-          gcc-multilib g++-multilib clang llvm nodejs npm yarn golang-go gh
+          gcc-multilib g++-multilib clang llvm nodejs yarn golang-go gh
         
         # 安装 UPX
         UPX_VER="5.0.2"
