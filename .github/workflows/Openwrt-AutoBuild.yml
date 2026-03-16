@@ -22,7 +22,7 @@ on:
           - x86_generic
       use_self_hosted:
         description: 'Use self-hosted runner'
-        required: false
+        required: true
         default: 'true'
         type: boolean
       clean_cache:
