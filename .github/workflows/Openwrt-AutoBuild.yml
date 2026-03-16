@@ -1,7 +1,7 @@
 #=================================================
 # https://github.com/P3TERX/Actions-OpenWrt
 # Description: Build OpenWrt using GitHub Actions
-# Lisence: MIT
+# License: MIT
 # Author: P3TERX
 # Blog: https://p3terx.com
 #=================================================
@@ -10,23 +10,16 @@ name: Build OpenWrt
 
 on: 
   repository_dispatch:
+  workflow_dispatch:
+  push:
+    branches: [ x86_64 ]
 
 env:
-  REPO_TOKEN: ${{ secrets.TOKEN_MGZ0227 }}
-  PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}
-  PPPOE_PASSWD: ${{ secrets.PPPOE_PASSWD }}
-  SCKEY: ${{ secrets.SCKEY }}
-  TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-  DOCKER_ID: ${{ secrets.DOCKER_ID }}
-  DOCKER_PASSWD: ${{ secrets.DOCKER_PASSWD }}
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    #runs-on: self-hosted
     
     name: Build ${{matrix.target}}
     strategy:
@@ -39,11 +32,6 @@ jobs:
       uses: actions/checkout@main
       with:
           fetch-depth: 0
-
-    # - name: Set up secret file
-      # run: |
-        # echo ${{ secrets.TELEGRAM_CHAT_ID }} | sed 's/./& /g'
-        # echo ${{ secrets.TELEGRAM_TOKEN }} | sed 's/./& /g'
 
     - name: Load Settings.ini
       run: |
@@ -62,23 +50,10 @@ jobs:
         echo "UPLOAD_FIRMWARE_FOR_RELEASE=${UPLOAD_FIRMWARE_FOR_RELEASE}" >> $GITHUB_ENV
         echo "UPLOAD_FIRMWARE_TO_COWTRANSFER=${UPLOAD_FIRMWARE_TO_COWTRANSFER}" >> $GITHUB_ENV
         echo "UPLOAD_FIRMWARE_TO_WETRANSFER=${UPLOAD_FIRMWARE_TO_WETRANSFER}" >> $GITHUB_ENV
-        sed -i "1a REPO_TOKEN=${{ secrets.TOKEN_MGZ0227 }}" ${{ github.workspace }}/devices/common/diy.sh
         sed -i "1a TARGET=${{matrix.target}}" ${{ github.workspace }}/devices/common/diy.sh
         if [ ${{matrix.target}} == "x86_64" ]; then
             echo "ARCH=linux/amd64" >> $GITHUB_ENV
             echo "MTARGET=x86_64" >> $GITHUB_ENV
-        fi
-
-    - name: Trigger Packages Update
-      continue-on-error: true
-      if: contains(github.event.action, 'pkg')
-      run: |
-        status=$(curl -H "Authorization: token ${{ secrets.TOKEN_MGZ0227 }}" -s "https://api.github.com/repos/mgz0227/OP-Packages/actions/runs" | jq -r '.workflow_runs[0].status')
-        if [[ "$status" == "completed" ]]; then
-          curl -X POST https://api.github.com/repos/mgz0227/OP-Packages/dispatches \
-            -H "Accept: application/vnd.github.everest-preview+json" \
-            -H "Authorization: token ${{ secrets.TOKEN_MGZ0227 }}" \
-          --data '{"event_type": "update"}'
         fi
 
     - name: Free disk space
@@ -121,19 +96,8 @@ jobs:
     - name: Clone source code
       run: |
         set -x
-        TAG_INFO="$(curl -gs -H 'Content-Type: application/json' \
-           -H "Authorization: Bearer ${{ secrets.TOKEN_MGZ0227 }}" \
-           -X POST -d '{ "query": "query {repository(owner: \"mgz0227\", name: \"openwrt\") {refs(refPrefix: \"refs/tags/\", first: 4, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {nodes {name target { ... on Tag {tagger {date}}}}}}}"}' https://api.github.com/graphql)"
-        TAG_DATE="$( echo ${TAG_INFO} | jq -r '.data.repository.refs.nodes[] | select(.name | startswith("v25")) | .target.tagger.date' | head -n 1)"
-        if [[ $(( ($(date +%s) - $(date -d "$TAG_DATE" +%s)) / 86400 )) -lt 20 ]]; then
-        REPO_BRANCH="$( echo ${TAG_INFO} | jq -r '.data.repository.refs.nodes[].name' | grep v25 | head -n 1)"
-        else
-        REPO_BRANCH="openwrt-25.12"
-        fi
-        #echo "CONFIG_VERSION_REPO=\"https://op.miaogongzi.cc/`echo $REPO_BRANCH  | cut -d . -f 1,2 | sed -e 's/^v//'`\"">>devices/common/.config
-        #echo "CONFIG_VERSION_REPO=\"https://op.miaogongzi.cc/25.12\"">>devices/common/.config
         if [[ ! "${{ env.REPO_BRANCH }}" && "$REPO_URL" == "https://github.com/openwrt/openwrt" ]]; then
-            git clone $REPO_URL -b $REPO_BRANCH openwrt
+            git clone $REPO_URL -b openwrt-25.12 openwrt
         elif [[ ! "${{ env.REPO_BRANCH }}" ]]; then
             git clone $REPO_URL openwrt
         else
@@ -220,21 +184,6 @@ jobs:
         CONFIG_FAT_DEFAULT_IOCHARSET="utf8" \
         ' `find target/linux -path "target/linux/*/config-*"`
 
-    - name: Write custom APK keys
-      run: |
-        cd openwrt
-
-        cat > private-key.pem <<'EOF'
-        ${{ secrets.APK_PRIVATE_KEY }}
-        EOF
-
-        cat > public-key.pem <<'EOF'
-        ${{ secrets.APK_PUBLIC_KEY }}
-        EOF
-
-        chmod 600 private-key.pem
-        ls -l private-key.pem public-key.pem
-
     - name: Defconfig
       run: |
         cd openwrt
@@ -247,40 +196,24 @@ jobs:
         fi
 
         make defconfig
-        #make oldconfig
         fi
         cat .config
         
-    - name: Check key files in TOPDIR
-      run: |
-        cd openwrt
-        pwd
-        ls -l private-key.pem public-key.pem
-        grep -E 'CONFIG_SIGNED_PACKAGES|CONFIG_PACKAGE_openwrt-keyring|CONFIG_SIGNATURE_CHECK' .config || true
 
-        
     - name: Get kernel version
       id: kernel
       run: |
         cd openwrt
-        #KERNEL_VER=$(make -s kernelversion 2>/dev/null | head -n1 | tr -d '[:space:]' || true)
-        # 找到 include/kernel-* 下的版本文件
-        KERNEL_FILE=$(ls target/linux/generic/kernel-6.18 | head -n1)
-        # 提取主版本号
-        BASE_VER=$(basename $KERNEL_FILE | cut -d'-' -f2)
-        # 提取补丁号
-        PATCH_VER=$(grep "^LINUX_VERSION-$BASE_VER" "$KERNEL_FILE" | cut -d= -f2 | tr -d ' .')
-        # 拼接完整版本号
-        KERNEL_FULL="$BASE_VER.$PATCH_VER"
+        KERNEL_FILE=$(ls target/linux/generic/kernel-6.18 2>/dev/null | head -n1 || ls target/linux/generic/kernel-* 2>/dev/null | head -n1)
+        if [ -n "$KERNEL_FILE" ]; then
+          BASE_VER=$(basename $KERNEL_FILE | cut -d'-' -f2)
+          PATCH_VER=$(grep "^LINUX_VERSION-$BASE_VER" "$KERNEL_FILE" 2>/dev/null | cut -d= -f2 | tr -d ' .')
+          KERNEL_FULL="$BASE_VER.$PATCH_VER"
+        else
+          KERNEL_FULL="unknown"
+        fi
         echo "KERNEL_VER=$KERNEL_FULL" >> $GITHUB_ENV
         echo "Kernel full version detected: $KERNEL_FULL"
-
- #   - name: Download package
- #     id: package
- #     run: |
- #       cd openwrt
- #       make download -j$(($(nproc)+1)) &
-  #      sleep 5
 
     - name: Cache
       uses: mgz0227/cachewrtbuild@main
@@ -306,70 +239,33 @@ jobs:
         shopt -s extglob
         cd openwrt
         echo -e "$(($(nproc)+1)) thread compile"
-        #make -j1 V=sc
-        make -j$(($(nproc)+1)) || { log=$(mktemp);make V=s &>$log; } || { tail -50 $log; curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=❌ OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译失败 😂" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage";df -hT;exit 1; }
-        #make -j1 V=sc || make V=sc &>build.log || {tail -50 build.log; curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=❌ OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译失败 😂" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage";df -hT;exit 1;}
+        make -j$(($(nproc)+1)) || { log=$(mktemp);make V=s &>$log; tail -100 $log; exit 1; }
         sed -i "s/# CONFIG_IB is not set/CONFIG_IB=y/" .config
         rm -rf staging_dir/toolchain-*/bin/*openwrt-linux-musl-lto-dump
         rm -rf staging_dir/toolchain-*/initial
         df -hT
 
-    
-
-
     - name: Organize files
       id: organize
       continue-on-error: true
       run: |
-                shopt -s extglob
-                cd openwrt/bin/targets/*/*/
-                cp $GITHUB_WORKSPACE/openwrt/.config ${{matrix.target}}.config || true
-                cp $GITHUB_WORKSPACE/openwrt/build_dir/target-*/linux-*/linux-*/.config ${{matrix.target}}_kernel.config || true
-                Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
-                echo "EMOJI=${Emoji[$[$RANDOM % ${#Emoji[@]}]]}" >> $GITHUB_ENV
-                # Unzip .gz files
-             #   for file in *.gz; do
-            #      gunzip "$file"
-           #     done
-        
-                 # Rename all files, including IMG files after decompression
-          #      find . -type f -name "meowwrt-*" -exec rename "s/meowwrt-/MeowWrt-${{ env.VERSION }}.2025-/" {} + || true
-        
-                # Recompress all IMG files back to .gz format
-         #       for file in *.img; do
-         #       gzip "$file"
-        #        done
-                
+        shopt -s extglob
+        cd openwrt/bin/targets/*/*/
+        cp $GITHUB_WORKSPACE/openwrt/.config ${{matrix.target}}.config || true
+        cp $GITHUB_WORKSPACE/openwrt/build_dir/target-*/linux-*/linux-*/.config ${{matrix.target}}_kernel.config || true
+        Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
+        echo "EMOJI=${Emoji[$[$RANDOM % ${#Emoji[@]}]]}" >> $GITHUB_ENV
 
-
-                
     - name: Organize Release files
       id: organizeRelease
       continue-on-error: true
       run: |
-              shopt -s extglob
-              mkdir -p firmware/${{matrix.target}}          
-              cp -rf openwrt/bin/targets/*/*/*{combined,imagebuilder,rootfs,256}* ./firmware/${{matrix.target}}/ || true
-              cp -rf openwrt/bin/targets/*/*/*.bin* ./firmware/${{matrix.target}}/ || true
-                Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
-                echo "EMOJI=${Emoji[$[$RANDOM % ${#Emoji[@]}]]}" >> $GITHUB_ENV
-                if [ ${{matrix.target}} == "x86_64" ]; then
-                echo "DOCKERTAG=${{ secrets.DOCKER_ID }}/openwrt-nginx:latest" >> $GITHUB_ENV
-                fi
-
-    - name: Deploy imagebuilder to Ubuntuserver
-      uses: easingthemes/ssh-deploy@main
-      continue-on-error: true
-      if: env.SSH_PRIVATE_KEY && ! contains(github.event.action, 'noser')
-      with:
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        ARGS: "-avzr"
-        SOURCE: openwrt/bin/targets
-        REMOTE_HOST: ${{ secrets.HOST }}
-        REMOTE_PORT: ${{ secrets.PORT }}
-        REMOTE_USER: ${{ secrets.SERVER_USERNAME }}
-        TARGET: "/www/wwwroot/op.miaogongzi.cc/25.12"
-
+        shopt -s extglob
+        mkdir -p firmware/${{matrix.target}}          
+        cp -rf openwrt/bin/targets/*/*/*{combined,imagebuilder,rootfs,256}* ./firmware/${{matrix.target}}/ || true
+        cp -rf openwrt/bin/targets/*/*/*.bin* ./firmware/${{matrix.target}}/ || true
+        Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
+        echo "EMOJI=${Emoji[$[$RANDOM % ${#Emoji[@]}]]}" >> $GITHUB_ENV
 
     - name: Upload firmware for artifact
       uses: actions/upload-artifact@main
@@ -381,21 +277,21 @@ jobs:
 
     - name: Create release
       id: create_release
-      if: env.REPO_TOKEN && env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true'
+      if: env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true'
       continue-on-error: true
       run: |
-        echo -e "墙内加速下载 🚀:\n" >> release.txt
-        echo -e "[CDN] (https://op.miaogongzi.cc/25.12/targets/x86/64/ ☁)\n" >> release.txt
-        [ ${{ env.WETRANS }} ] && echo -e "[WeTransfer] (${{ env.WETRANS }} 🗽)\n" >> release.txt
-        [ ${{ env.COWURL }} ] && echo -e "[奶牛上传] (${{ env.COWURL }} 🐮)\n" >> release.txt
-        [ ${{ env.NOTICE }} ] && echo -e "${{ env.NOTICE }}" >> release.txt || true
+        echo -e "OpenWrt Firmware Release\n" >> release.txt
+        echo -e "Target: ${{matrix.target}}\n" >> release.txt
+        echo -e "Kernel: ${{ env.KERNEL_VER }}\n" >> release.txt
+        [ ${{ env.WETRANS }} ] && echo -e "[WeTransfer] (${{ env.WETRANS }})\n" >> release.txt
+        [ ${{ env.COWURL }} ] && echo -e "[CowTransfer] (${{ env.COWURL }})\n" >> release.txt
 
     - name: Upload firmware for release
       uses: softprops/action-gh-release@master
       continue-on-error: true
-      if: env.REPO_TOKEN && env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true'
+      if: env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true'
       env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN_MGZ0227 }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         files: |
             firmware/${{matrix.target}}/*
@@ -403,38 +299,12 @@ jobs:
         name: ${{ env.date2 }} ${{matrix.target}} KERNEL:${{ env.KERNEL_VER }} ${{ env.EMOJI }}
         tag_name: ${{ env.date }}_${{matrix.target}}
         body_path: release.txt
-    
-    - name: Deploy imagebuilder to server
-      uses: easingthemes/ssh-deploy@main
-      continue-on-error: true
-      if: env.SSH_PRIVATE_KEY && ! contains(github.event.action, 'noser')
-      with:
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        ARGS: "-avzr"
-        SOURCE: openwrt/bin/targets
-        REMOTE_HOST: ${{ secrets.SERVER_HOST }}
-        REMOTE_PORT: ${{ secrets.SERVER_PORT }}
-        REMOTE_USER: ${{ secrets.SERVER_USERNAME }}
-        TARGET: "/www/wwwroot/op.miaogongzi.cc/25.12"
-
-
-    - name: WeChat notification
-      continue-on-error: true
-      if: env.SCKEY
-      run: |
-        # [ steps.compile.outputs.status == 'success' ] && curl https://sctapi.ftqq.com/${{ secrets.SCKEY }}.send?text=🎉OpenWrt_${{ env.VERSION }}_${{matrix.target}}编译完成😋|| curl https://sctapi.ftqq.com/${{ secrets.SCKEY }}.send?text=❌OpenWrt_${{ env.VERSION }}_${{matrix.target}}编译失败😂
-
-    - name: Telegram notification
-      if: env.TELEGRAM_TOKEN && ! contains(github.event.action, 'notg')
-      continue-on-error: true
-      run: |
-        curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=🎉 OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译成功 😋  https://dl.openwrt.ai/firmware/${{matrix.target}}/  ${{ env.COWURL }}   ${{ env.WETRANS }} 🚀" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage"
 
     - name: Delete workflow runs
       uses: mgz0227/delete-workflow-runs@main
       continue-on-error: true
       with:
-        token: ${{ secrets.TOKEN_MGZ0227 }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         retain_days: 100
         keep_minimum_runs: 0
 
@@ -446,4 +316,4 @@ jobs:
         keep_latest: 15
         delete_tags: true
       env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN_MGZ0227 }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
