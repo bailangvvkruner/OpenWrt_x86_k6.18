@@ -78,7 +78,11 @@ jobs:
         #   libboost-system-dev libboost-filesystem-dev libpcre3-dev \
         #   libelf-dev device-tree-compiler libgmp3-dev libmpc-dev libfuse-dev dwarves \
         #   qemu-utils aria2
-
+        
+        # 切换到官方 Ubuntu 源（香港机器用官方源更快）
+        sudo sed -i 's|http://mirrors.cloud.tencent.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+        sudo sed -i 's|http://mirrors.tencentyun.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+        
         sudo -E apt -yqq update
         sudo -E apt -yqq full-upgrade
         sudo -E apt -yqq autoremove --purge
