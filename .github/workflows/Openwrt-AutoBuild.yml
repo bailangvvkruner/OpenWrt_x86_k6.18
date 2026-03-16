@@ -65,24 +65,22 @@ jobs:
             echo "MTARGET=x86_64" >> $GITHUB_ENV
         fi
 
-    - name: Check dependencies
+    - name: Install dependencies
       run: |
-        echo "Checking required dependencies on self-hosted runner..."
-        missing_deps=""
-        for dep in build-essential clang flex bison gawk gcc g++ gettext git \
-          libncurses-dev libssl-dev python3 rsync swig unzip zlib1g-dev wget \
-          file ccache jq; do
-          if ! dpkg -l | grep -q "^ii  $dep" && ! command -v $dep &> /dev/null; then
-            missing_deps="$missing_deps $dep"
-          fi
-        done
-        if [ -n "$missing_deps" ]; then
-          echo "Missing dependencies:$missing_deps"
-          echo "Please install them on your self-hosted runner"
-          echo "Run: sudo apt-get install$missing_deps"
-          exit 1
-        fi
-        echo "All dependencies are installed"
+        echo "Installing required dependencies on self-hosted runner..."
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential clang flex bison gawk gcc g++ gettext git \
+          libncurses-dev libssl-dev python3 python3-dev rsync swig unzip \
+          zlib1g-dev wget file ccache jq \
+          libboost-system-dev libboost-filesystem-dev libpcre3-dev \
+          libelf-dev device-tree-compiler libgmp3-dev libmpc-dev libfuse-dev dwarves \
+          qemu-utils aria2
+
+        sudo -E apt -yqq install dos2unix
+        sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+
+        echo "All dependencies installed"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git config --global user.name "github-actions[bot]"
 
@@ -236,6 +234,18 @@ jobs:
         rm -rf staging_dir/toolchain-*/bin/*openwrt-linux-musl-lto-dump
         rm -rf staging_dir/toolchain-*/initial
         df -hT
+
+    # - name: Machine Information(机器信息)
+    #     run: |
+    #       cd /
+
+    #       echo "======================="
+    #       lscpu | grep -E "name|Core|Thread"
+    #       echo "======================="
+    #       df -h
+    #       echo "======================="
+    #       du -h --max-depth=1
+    #       echo "======================="
 
     - name: Organize files
       id: organize
