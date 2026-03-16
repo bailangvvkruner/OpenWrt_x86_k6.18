@@ -20,16 +20,6 @@ on:
         options:
           - x86_64
           - x86_generic
-      use_self_hosted:
-        description: 'Use self-hosted runner'
-        required: true
-        default: 'true'
-        type: boolean
-      clean_cache:
-        description: 'Clean build cache'
-        required: false
-        default: 'false'
-        type: boolean
   push:
     branches: [ x86_64 ]
 
@@ -38,8 +28,7 @@ env:
 
 jobs:
   build:
-    # runs-on: ${{ github.event.inputs.use_self_hosted == 'true' && 'self-hosted' || 'ubuntu-latest' }}
-    runs-on: ${{ github.event.inputs.use_self_hosted == 'true' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: self-hosted
     
     name: Build ${{matrix.target}}
     strategy:
@@ -76,39 +65,7 @@ jobs:
             echo "MTARGET=x86_64" >> $GITHUB_ENV
         fi
 
-    - name: Free disk space (GitHub hosted only)
-      if: ${{ github.event.inputs.use_self_hosted != 'true' }}
-      uses: coder-xiaomo/free-disk-space@main
-      with:
-        tool-cache: false
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: true
-        swap-storage: true
-
-    - name: Initialization environment (GitHub hosted only)
-      if: ${{ github.event.inputs.use_self_hosted != 'true' }}
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo -E apt-get -qq update
-        sudo -E apt-get -qq install build-essential clang flex bison g++ gawk \
-        gcc-multilib gcc g++-multilib gettext git libncurses5-dev libssl-dev \
-        python3-setuptools rsync swig unzip zlib1g-dev file wget \
-        libboost-system-dev libboost-filesystem-dev libpcre3-dev libv4l-dev \
-        llvm python3-pyelftools libpython3-dev aria2 jq qemu-utils ccache rename \
-        libelf-dev device-tree-compiler libgmp3-dev libmpc-dev libfuse-dev dwarves
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
-
-        sudo timedatectl set-timezone "Asia/Shanghai"
-        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git config --global user.name "github-actions[bot]"
-
-    - name: Check dependencies (Self-hosted only)
-      if: ${{ github.event.inputs.use_self_hosted == 'true' }}
+    - name: Check dependencies
       run: |
         echo "Checking required dependencies on self-hosted runner..."
         missing_deps=""
@@ -155,18 +112,7 @@ jobs:
             fi
         fi
     
-    - name: Free up disk space (GitHub hosted only)
-      if: ${{ github.event.inputs.use_self_hosted != 'true' }}
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo mkdir -p -m 777 /mnt/openwrt/dl /mnt/openwrt/staging_dir /mnt/openwrt/build_dir
-        ln -sf /mnt/openwrt/dl openwrt/dl
-        ln -sf /mnt/openwrt/staging_dir openwrt/staging_dir
-        ln -sf /mnt/openwrt/build_dir openwrt/build_dir
-
-    - name: Setup build directories (Self-hosted only)
-      if: ${{ github.event.inputs.use_self_hosted == 'true' }}
+    - name: Setup build directories
       run: |
         BUILD_ROOT="${{ github.workspace }}/openwrt_build"
         mkdir -p "$BUILD_ROOT/dl" "$BUILD_ROOT/staging_dir" "$BUILD_ROOT/build_dir"
@@ -269,15 +215,6 @@ jobs:
         echo "KERNEL_VER=$KERNEL_FULL" >> $GITHUB_ENV
         echo "Kernel full version detected: $KERNEL_FULL"
 
-    - name: Cache (GitHub hosted only)
-      if: ${{ github.event.inputs.use_self_hosted != 'true' }}
-      uses: mgz0227/cachewrtbuild@main
-      with:
-        ccache: 'true'
-        mixkey: ${{ matrix.target }}
-        clean: ${{ github.event.inputs.clean_cache == 'true' || contains(github.event.action, 'nocache') }}
-        prefix: ${{ github.workspace }}/openwrt
-    
     - name: Check space usage
       run: |
         shopt -s extglob
