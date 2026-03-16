@@ -11,8 +11,18 @@ name: Build OpenWrt
 on: 
   repository_dispatch:
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target platform to build'
+        required: true
+        default: 'x86_64'
+        type: choice
+        options:
+          - x86_64
+          - x86_generic
   push:
     branches: [ x86_64 ]
+    # branches: [ main, master ]
 
 env:
   TZ: Asia/Shanghai
@@ -25,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ["${{ github.event.client_payload.target }}"]
+        target: ["${{ github.event.client_payload.target || github.event.inputs.target || 'x86_64' }}"]
         
     steps:
     - name: Checkout
