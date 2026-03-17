@@ -91,6 +91,12 @@ cd ../../
 #devel/perf
 #cd ../
 
+# ========== 第五步：修复 tools/tar 编译问题 ==========
+# 在 tools/tar/Makefile 中添加 gl_cv_func_getcwd_path_max=yes
+# 这会跳过 gnulib 对 getcwd_path_max 的运行时检测
+# 解决某些环境下 tar 编译卡住或失败的问题
+sed -i '/HOST_BUILD_PARALLEL := 1/a HOST_CONFIGURE_VARS += gl_cv_func_getcwd_path_max=yes' tools/tar/Makefile
+
 # ============================================================
 # 脚本执行完成后的效果：
 # 1. OpenWrt 源码中的内核相关代码已切换到 6.12.y 版本
